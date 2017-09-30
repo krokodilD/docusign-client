@@ -1,6 +1,7 @@
 {
     "name": "daniilkrok/docusign-client",
     "description": "Send and fill pdf. Docusign REST API",
+    "license": "MIT",
     "authors": [
         {
             "name": "Daniil Krok",
@@ -13,7 +14,7 @@
     },
     "autoload": {
         "psr-4": {
-            "DocusignClient\\": "src/"
+            "Daniilkrok\\DocusignClient\\": "src/"
         }
     }
 }
