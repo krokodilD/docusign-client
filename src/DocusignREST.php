@@ -23,6 +23,8 @@ class DocusignREST
     private $envelopeId;
     private $embeddedViewURL;
 
+    private $tabsData;
+
     function __construct($param)
     {
         // Input your info:
@@ -42,6 +44,30 @@ class DocusignREST
     public function addRecipient($param) {
         $this->recipientName = $param['recipient_name'];
         $this->recipientEmail = $param['recipient_email'];
+    }
+
+    /**
+     * @param mixed $tabsData
+     */
+    public function setTabsData($tabsData)
+    {
+        $this->tabsData = $tabsData;
+    }
+
+    /**
+     * @param mixed $templateId
+     */
+    public function setTemplateId($templateId)
+    {
+        $this->templateId = $templateId;
+    }
+
+    /**
+     * @param string $templateRoleName
+     */
+    public function setTemplateRoleName($templateRoleName)
+    {
+        $this->templateRoleName = $templateRoleName;
     }
 
     /////////////////////////////////////////////////////////////////////////////////////////////////
@@ -72,32 +98,22 @@ class DocusignREST
     /////////////////////////////////////////////////////////////////////////////////////////////////
     // STEP 2 - Create an envelope with an Embedded recipient (uses the clientUserId property)
     /////////////////////////////////////////////////////////////////////////////////////////////////
-    public function createEnvelopeUseTemplate($templateID) {
-        $this->templateId = $templateID;
+    public function createEnvelopeUseTemplate($template_set) {
+        //$templates_set->data\
+        //var_dump($templates_set->template_role); exit();
         $data = array(
             "status" => "sent",
             "accountId" => $this->accountId,
             "emailSubject" => "DocuSign API - Embedded Sending Example",
-            "templateId" => $this->templateId,
+            "templateId" => $template_set->template_id,
             "templateRoles" => array(
                 array(
-                    "roleName" => $this->templateRoleName,
+                    "roleName" => $template_set->template_role,
                     "email" => $this->recipientEmail,
                     "name" => $this->recipientName,
                     "recipientId" => "1",
                     "clientUserId" => $this->clientUserId,
-                    "tabs" => array(
-                        "textTabs" => array(
-                            array(
-                                "tabLabel"=> "name",
-                                "value" => "TEST TEXT"
-                            ),
-                            array(
-                                "tabLabel"=> "address",
-                                "value" => "TEXT"
-                            )
-                        )
-                    )
+                    "tabs" => $template_set->data
                 )
             )
         );
@@ -125,107 +141,55 @@ class DocusignREST
         $this->envelopeId = $envelopeId;
     }
 
-    public function createEnvelopeUseFile($file_path) {
-        $file_name = basename($file_path);
-        /*$data = array(
-            "status" => "sent",
-            "accountId" => $this->accountId,
-            "emailSubject" => "DocuSign API - Embedded Sending Example",
-            "documents" => array(
-                array(
-                    "documentId" => "1",
-                    "name" => "test.pdf",
-                    "transformPdfFields" => "true"
-                )
-            ),
-            "recipients" => array(
-                "signers" => array(
+    public function createEnvelopeUseFile($files_set) {
+        $compositeTemplates = [];
+        $file_data_string = '';
+        $i = 1;
+        foreach ($files_set as $set) {
+            $file_name = basename($set->file);
+            $compositeTemplates[] = array(
+                "inlineTemplates" => array(
                     array(
-                        "email" => $this->recipientEmail,
-                        "name" => $this->recipientName,
-                        "recipientId" => "1",
-                        "tabs" => array(
-                            "textTabs" => array(
+                        "sequence" => 1,
+                        "recipients" => array(
+                            "signers" => array(
                                 array(
-                                    "tabLabel"=> "name\\*",
-                                    "value" => "$ 100",
-                                    //"locked"=> "true",
-                                    //"documentId"=> "1",
-                                    //"pageNumber"=> "1"
+                                    "email" => $this->recipientEmail,
+                                    "name" => $this->recipientName,
+                                    "recipientId" => "1",
+                                    "clientUserId" => $this->clientUserId,
+                                    "routingOrder" => "1",
+                                    "tabs" => $set->data
                                 )
                             )
                         )
                     )
+                ),
+                "document" => array(
+                    "documentId" => $i,
+                    "name" => $file_name,
+                    "transformPdfFields" => "true"
                 )
-            )
-        );*/
+            );
+
+            $file_contents = file_get_contents($set->file);
+            $file_data_string .= "--myboundary\r\n"
+            ."Content-Type:application/pdf\r\n"
+            ."Content-Disposition: file; filename=\"$file_name\"; documentid=$i \r\n"
+            ."\r\n"
+            ."$file_contents\r\n";
+
+            $i++;
+        }
+
         $data = array(
             "status" => "sent",
             "emailSubject" => "DocuSign API - Embedded Sending Example",
-            "compositeTemplates" => array(
-                array(
-                    "inlineTemplates" => array(
-                        array(
-                            "sequence" => 1,
-                            "recipients" => array(
-                                "signers" => array(
-                                    array(
-                                        "email" => $this->recipientEmail,
-                                        "name" => $this->recipientName,
-                                        "recipientId" => "1",
-                                        "clientUserId" => $this->clientUserId,
-                                        "routingOrder" => "1",
-                                        "tabs" => array(
-                                            "textTabs" => array(
-                                                array(
-                                                    "tabLabel"=> "Life1_name",
-                                                    "value" => "Signer Onee",
-                                                    "locked"=> true,
-                                                    "fontColor"=> "BrightBlue",
-                                                )
-                                            ),
-                                            "checkboxTabs" => array(
-                                                array(
-                                                    "tabLabel"=> "Rnb_her",
-                                                    "selected"=> true,
-                                                    "locked"=> true,
-                                                ),
-                                                array(
-                                                    "tabLabel"=> "Rnb_ltcr",
-                                                    "selected"=> true,
-                                                    "locked"=> true,
-                                                )
-                                            ),
-                                            "radioGroupTabs" => array(
-                                                array(
-                                                    "groupName" => "Life1_sex",
-                                                    "radios" => array(
-                                                        array(
-                                                            "value" => "M",
-                                                            "selected"=> true,
-                                                            "locked"=> true
-                                                        )
-                                                    )
-                                                )
-                                            )
-                                        )
-                                    )
-                                )
-                            )
-                        )
-                    ),
-                    "document" => array(
-                        "documentId" => 1,
-                        "name" => $file_name,
-                        "transformPdfFields" => "true"
-                    )
-                )
-            )
+            "compositeTemplates" => $compositeTemplates
         );
 
         $data = json_encode($data);
 
-        $file_contents = file_get_contents($file_path);
         $data_string = "\r\n"
             ."\r\n"
             ."--myboundary\r\n"
@@ -233,11 +197,7 @@ class DocusignREST
             ."Content-Disposition: form-data\r\n"
             ."\r\n"
             ."$data\r\n"
-            ."--myboundary\r\n"
-            ."Content-Type:application/pdf\r\n"
-            ."Content-Disposition: file; filename=\"$file_name\"; documentid=1 \r\n"
-            ."\r\n"
-            ."$file_contents\r\n"
+            .$file_data_string
             ."--myboundary--\r\n"
             ."\r\n";
         
@@ -275,10 +235,10 @@ class DocusignREST
             "recipientId" => "1",
             "clientUserId" => $this->clientUserId,
             "authenticationMethod" => "email",
-            "returnUrl" => "http://www.docusign.com/devcenter"
+            "returnUrl" => "https://www.docusign.com/devcenter/?viewing_complete=read-only"
         );
         $data_string = json_encode($data);
-        $curl = curl_init($this->baseUrl . "/envelopes/$this->envelopeId/views/recipient" ); //sender
+        $curl = curl_init($this->baseUrl . "/envelopes/$this->envelopeId/views/recipient/" ); //sender
         curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($curl, CURLOPT_POST, true);
         curl_setopt($curl, CURLOPT_POSTFIELDS, $data_string);
@@ -298,10 +258,6 @@ class DocusignREST
         //--- display results
         //echo "Embedded URL is: \n\n" . $url . "\n\nNavigate to this URL to start the tag-and-send view of the envelope\n";
         $this->embeddedViewURL = $url;
-    }
-    
-    public function generateTabsData() {
-        
     }
 
     /**

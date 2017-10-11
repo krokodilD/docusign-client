@@ -1,0 +1,15 @@
+Life1_name=insured->firstName,insured->middleName,insured->lastName|text
+Life1_dob_mth=insured->birth|text|0-2-month
+Life1_dob_day=insured->birth|text|2-2
+Life1_dob_year=insured->birth|text|4-4
+Life1_pob_state=insured->state->name|text
+Life1_sex=insured->gender|radiogroup
+Rnb_her=|checkbox
+Life1_SSN=insured->ss|text
+Life1_DL_state=insured->driverState->abbreviation|text
+Life1_DL_num=insured->driverNumber|text
+Life1_home_addr=insured->address,insured->city,insured->state->name,insured->zip|text
+Life1_home_phone=insured->phonePersonal|text
+Life1_bus_phone=insured->phoneBusiness|text
+Life1_email_addr=insured->email|text
+Life1_genrisk_lifestyle_7=insured->armedForces[0]->name|radiogroup

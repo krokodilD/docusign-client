@@ -9,6 +9,11 @@ namespace Daniilkrok\DocusignClient;
 
 class DocusignClient
 {
+    const LOG_PATH = __DIR__."/logs/error.log";
+
+    private $fieldsDataArray;
+    private $requestData;
+
     function __construct()
     {
         putenv ("DK_DUS_HOST=https://demo.docusign.net");
@@ -16,55 +21,139 @@ class DocusignClient
         putenv ("DK_DUS_LOGIN=krokodild@gmail.com");
         putenv ("DK_DUS_PASSWORD=KrokodilD9");
         putenv ("DK_DUS_ADMIN_EMAIL=krokodild@gmail.com");
-    }
 
-    public function index()
-    {
         $entityBody = file_get_contents('php://input');
-        $requestData = json_decode($entityBody);
-
-        $result = $this->sendToDocusign([
-            'pdf_file' => $requestData->docusign->recipient_name,
-            'tabsData' => $requestData->docusign->recipient_name,
-            'recipient_name' => $requestData->docusign->recipient_name,
-            'recipient_email' => $requestData->docusign->recipient_email,
-        ]);
-
-        echo $result;
+        $this->requestData = json_decode($entityBody);
     }
 
-    public function sendToDocusign($data)
+    public function dusRun()
     {
-        $DUS = new DocusignREST([
-            'host' => env("DK_DUS_HOST"),
-            'integrator_key' => env("DK_DUS_INTEGRATOR_KEY"),
-            'email' => env("DK_DUS_LOGIN"),
-            'password' => env("DK_DUS_PASSWORD"),
-        ]);
-        $DUS->addRecipient([
-            'recipient_name' => $data['recipient_name'],
-            'recipient_email' => $data['recipient_email']
-        ]);
-        //$DUS->createEnvelopeUseTemplate("d61a246f-f17a-4ba5-b27f-6a71d0f70583");
-        $DUS->createEnvelopeUseFile(base_path("ICC16 NB6000_022017.pdf"));
-        $DUS->createEmbeddedViewUrl();
+        //try {
+            $DUS = new DocusignREST([
+                'host' => env("DK_DUS_HOST"),
+                'integrator_key' => env("DK_DUS_INTEGRATOR_KEY"),
+                'email' => env("DK_DUS_LOGIN"),
+                'password' => env("DK_DUS_PASSWORD"),
+            ]);
 
-        return json_encode([
-            "envelope_id" => $DUS->getEnvelopeId(),
-            "embedded_view_url" => $DUS->getEmbeddedViewURL()
-        ]);
+            $DUS->addRecipient([
+                'recipient_name' => $this->requestData->recipient_name,
+                'recipient_email' => $this->requestData->recipient_email
+            ]);
+
+            if ($this->requestData->method == 'template')
+                $DUS->createEnvelopeUseTemplate($this->processData($this->requestData->template_set));
+
+            if ($this->requestData->method == 'file')
+                $DUS->createEnvelopeUseFile($this->processData($this->requestData->files_set));
+
+            $DUS->createEmbeddedViewUrl();
+
+            echo json_encode([
+                "envelope_id" => $DUS->getEnvelopeId(),
+                "embedded_view_url" => $DUS->getEmbeddedViewURL()
+            ]);
+        /*} catch (\Exception $e) {
+            $this->Error($e->getMessage());
+        }*/
+    }
+
+    public function processData($sets) {
+        if ($this->requestData->method == 'template')
+            $sets->data = $this->fieldsMapping($sets->data);
+
+        if ($this->requestData->method == 'file')
+            foreach ($sets as $key => $set) {
+                $sets[$key]->data = $this->fieldsMapping($set->data);
+            }
+        return $sets;
     }
 
     public function fieldsMapping($object)
     {
-        $fieldsData = $object->data;
-        $template = __DIR__ . '/../pdf_templates/' . $object->mapping_template . '.map';
+        /*
+         EXAMPLE DUS FIELDS DATA:
+         array(
+            "textTabs" => array(
+                array(
+                    "tabLabel"=> "Life1_name",
+                    "value" => "Signer Onee",
+                    "locked"=> true
+                )
+            ),
+            "checkboxTabs" => array(
+                array(
+                    "tabLabel"=> "Rnb_her",
+                    "selected"=> true,
+                    "locked"=> true,
+                ),
+                array(
+                    "tabLabel"=> "Rnb_ltcr",
+                    "selected"=> true,
+                    "locked"=> true,
+                )
+            ),
+            "radioGroupTabs" => array(
+                array(
+                    "groupName" => "Life1_sex",
+                    "radios" => array(
+                        array(
+                            "value" => "M",
+                            "selected"=> true,
+                            "locked"=> true
+                        )
+                    )
+                )
+            )
+        );
+        */
+
+        $template = __DIR__ . '/maps/' . $this->requestData->map_template . '.map';
         $template = file($template);
 
-        $fieldsDataArray = [];
         foreach($template as $key => $line) {
             $lineData = explode('=', trim($line));
-            $field = $lineData[0];
+            $tabName = $lineData[0];
+            $tabValue = '';
+            $secondPart = explode('|', trim($lineData[1]));
+            $mapping = explode(',', $secondPart[0]);
+            $type = $secondPart[1];
+            $options = isset($secondPart[2]) ? explode('-', $secondPart[2]) : false;
+            //var_dump($tabName);
+            //var_dump($mapping);
+            //var_dump($type);
+            //var_dump($options);
+
+            if ($type){
+                switch ($type) {
+                    case 'text':
+                        foreach ($mapping as $map) {
+                            $tabValue .= $this->getValueByMap($object, $map).' ';
+                        }
+                        if (trim($tabValue) == '')
+                            break;
+                        if ($options) {
+                            $tabValue = substr($tabValue, $options[0], $options[1]); //cut the string option
+                            if (isset($options[2]) && $options[2] == "month") {
+                                $tabValue = date('M', mktime(0, 0, 0, $tabValue, 10));
+                            }
+                        }
+                        $this->addTextTab($tabName, $tabValue);
+                        break;
+                    case 'radiogroup':
+                        foreach ($mapping as $map) {
+                            $tabValue = $this->getValueByMap($object, $map);
+                        }
+                        $this->addRadioGroupTab($tabName, $tabValue);
+                        break;
+                    case 'checkbox':
+                        //var_dump($tabName); exit();
+                        $this->addCheckboxTab($tabName);
+                        break;
+                }
+            }
+
+            /*
             if (strripos($lineData[1], '|') !== false) {
                 $valueData = explode('|', trim($lineData[1]));
                 $map = str_replace('/', '->', $valueData[0]);
@@ -94,10 +183,39 @@ class DocusignClient
             }else{
                 $map = str_replace('/', '->', $lineData[1]);
                 $fieldsDataArray[$field] = $this->getValueByMap($fieldsData, $map);
-            }
+            }*/
         }
+        //var_dump($this->fieldsDataArray); exit();
+        return $this->fieldsDataArray;
+    }
 
-        return $fieldsDataArray;
+    function addTextTab($tabName, $tabValue) {
+        $this->fieldsDataArray['textTabs'][] = [
+            "tabLabel"=> $tabName,
+            "value" => trim($tabValue),
+            "locked"=> true,
+            "fontColor"=> "Purple",
+            "fontSize"=> "Size14",
+        ];
+    }
+    function addCheckboxTab($tabName) {
+        $this->fieldsDataArray['checkboxTabs'][] = [
+            "tabLabel"=> $tabName,
+            "selected"=> true,
+            "locked"=> true,
+        ];
+    }
+    function addRadioGroupTab($tabName, $tabValue) {
+        $this->fieldsDataArray['radioGroupTabs'][] = [
+            "groupName" => $tabName,
+            "radios" => [
+                [
+                    "value" => $tabValue,
+                    "selected"=> true,
+                    "locked"=> true
+                ]
+            ]
+        ];
     }
 
     function getValueByMap($obj, $path_str)
@@ -110,7 +228,6 @@ class DocusignClient
             if (!is_object($obj) || !property_exists($node, $prop)) {
                 $val = null;
                 break;
-
             }
             $val = $node->$prop;
             // TODO: Insert any logic here for cleaning up $val
@@ -119,5 +236,15 @@ class DocusignClient
         }
 
         return $val;
+    }
+
+    function Error($msg) {
+        //--------------------
+        error_log("(".date('d/m/Y H:i:s').") ".$msg."\n", 3, self::LOG_PATH);
+        // send email
+        //TODO: better email delivery
+        mail(env("DK_DUS_ADMIN_EMAIL"), 'Error DocuSign sending PDF', $msg);
+        die($msg);
+        //die('<b>FPDF-Merge Error:</b> '.$msg);
     }
 }
